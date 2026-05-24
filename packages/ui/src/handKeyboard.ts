@@ -8,11 +8,13 @@ type BuiltInOscillatorType = Exclude<OscillatorType, "custom">;
 export type HandKeyboardInstrumentId = "piano" | "organ" | "pad" | "pluck";
 export type HandKeyboardScale = "major" | "minor" | "pentatonic" | "chromatic";
 export type HandKeyboardOrder = "leftToRight" | "tracker";
+export type HandKeyboardPoseMode = "palmView" | "floorView";
 
 export interface HandKeyboardSettings {
   instrument: HandKeyboardInstrumentId;
   scale: HandKeyboardScale;
   rootMidiNote: number;
+  poseMode: HandKeyboardPoseMode;
   volume: number;
   tone: number;
   pressThreshold: number;
@@ -82,6 +84,11 @@ interface FingerDefinition extends FingerBendDetector {
   id: string;
   label: string;
   extraBends?: FingerBendDetector[];
+  floorDropEnd?: number;
+  floorDropStart?: number;
+  floorPalmClosedRatio?: number;
+  floorPalmOpenRatio?: number;
+  floorSensitivity?: number;
   sensitivity?: number;
 }
 
@@ -150,7 +157,12 @@ const fingerDefinitions: FingerDefinition[] = [
         bentAngle: 120,
       },
     ],
-    sensitivity: 1.14,
+    floorDropEnd: 0.07,
+    floorDropStart: -0.03,
+    floorPalmClosedRatio: 0.84,
+    floorPalmOpenRatio: 1.55,
+    floorSensitivity: 1.28,
+    sensitivity: 1.32,
   },
   {
     id: "index",
@@ -160,6 +172,8 @@ const fingerDefinitions: FingerDefinition[] = [
     tip: 8,
     straightAngle: 171,
     bentAngle: 96,
+    floorDropEnd: 0.14,
+    floorDropStart: 0.01,
   },
   {
     id: "middle",
@@ -169,6 +183,8 @@ const fingerDefinitions: FingerDefinition[] = [
     tip: 12,
     straightAngle: 171,
     bentAngle: 96,
+    floorDropEnd: 0.14,
+    floorDropStart: 0.01,
   },
   {
     id: "ring",
@@ -178,6 +194,8 @@ const fingerDefinitions: FingerDefinition[] = [
     tip: 16,
     straightAngle: 171,
     bentAngle: 96,
+    floorDropEnd: 0.13,
+    floorDropStart: 0,
   },
   {
     id: "pinky",
@@ -187,6 +205,9 @@ const fingerDefinitions: FingerDefinition[] = [
     tip: 20,
     straightAngle: 169,
     bentAngle: 120,
+    floorDropEnd: 0.1,
+    floorDropStart: -0.015,
+    floorSensitivity: 1.2,
     sensitivity: 1.12,
   },
 ];
@@ -304,10 +325,19 @@ export const handKeyboardOrderOptions: Array<{
   { label: "Tracker order", value: "tracker" },
 ];
 
+export const handKeyboardPoseModeOptions: Array<{
+  label: string;
+  value: HandKeyboardPoseMode;
+}> = [
+  { label: "Palm view", value: "palmView" },
+  { label: "Floor view", value: "floorView" },
+];
+
 export const defaultHandKeyboardSettings: HandKeyboardSettings = {
   instrument: "piano",
   scale: "major",
   rootMidiNote: 60,
+  poseMode: "palmView",
   volume: 0.58,
   tone: 0.62,
   pressThreshold: 0.62,
@@ -553,7 +583,7 @@ function createKeyboardKeys(
       const finger = fingerDefinitions[fingerIndex];
       const keyIndex = handSlot * fingerDefinitions.length + fingerIndex;
       const midiNote = midiNoteForKey(keyIndex, normalized);
-      const bend = slot ? fingerBend(slot.hand, finger) : 0;
+      const bend = slot ? fingerBend(slot.hand, finger, normalized.poseMode) : 0;
       const velocity = velocityFromBend(bend, normalized);
 
       keys.push({
@@ -593,14 +623,26 @@ function resolveHandSlots(
 function fingerBend(
   hand: NormalizedLandmark[],
   finger: FingerDefinition,
+  poseMode: HandKeyboardPoseMode,
 ): number {
   const detectors = [finger, ...(finger.extraBends ?? [])];
-  const bend = Math.max(
+  const angleBend = Math.max(
     0,
     ...detectors.map((detector) => detectorBend(hand, detector)),
   );
 
-  return clamp(bend * (finger.sensitivity ?? 1), 0, 1);
+  if (poseMode === "floorView") {
+    return clamp(
+      Math.max(
+        angleBend * (finger.sensitivity ?? 1) * 0.72,
+        floorPressBend(hand, finger) * (finger.floorSensitivity ?? 1),
+      ),
+      0,
+      1,
+    );
+  }
+
+  return clamp(angleBend * (finger.sensitivity ?? 1), 0, 1);
 }
 
 function detectorBend(
@@ -621,6 +663,33 @@ function detectorBend(
     0,
     1,
   );
+}
+
+function floorPressBend(
+  hand: NormalizedLandmark[],
+  finger: FingerDefinition,
+): number {
+  const base = hand[finger.base];
+  const joint = hand[finger.joint];
+  const tip = hand[finger.tip];
+  if (!base || !joint || !tip) {
+    return 0;
+  }
+
+  const scale = handScale(hand);
+  const normalizedDrop = (tip.y - joint.y) / scale;
+  const dropStart = finger.floorDropStart ?? 0.01;
+  const dropEnd = finger.floorDropEnd ?? 0.14;
+  const dropBend = normalizeRange(normalizedDrop, dropStart, dropEnd);
+  const palm = palmCenter(hand);
+  const baseDistance = Math.max(0.001, distance2d(base, palm));
+  const tipDistance = distance2d(tip, palm);
+  const distanceRatio = tipDistance / baseDistance;
+  const openRatio = finger.floorPalmOpenRatio ?? 2.15;
+  const closedRatio = finger.floorPalmClosedRatio ?? 1.04;
+  const palmBend = normalizeRange(distanceRatio, openRatio, closedRatio);
+
+  return Math.max(dropBend, palmBend * 0.92);
 }
 
 function angleAtJoint(
@@ -667,6 +736,27 @@ function palmCenter(hand: NormalizedLandmark[]): { x: number; y: number } {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
   };
+}
+
+function handScale(hand: NormalizedLandmark[]): number {
+  const points = hand.filter(Boolean);
+  if (points.length === 0) {
+    return 1;
+  }
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return Math.max(
+    0.001,
+    Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)),
+  );
+}
+
+function distance2d(
+  first: Pick<NormalizedLandmark, "x" | "y">,
+  second: Pick<NormalizedLandmark, "x" | "y">,
+): number {
+  return Math.hypot(first.x - second.x, first.y - second.y);
 }
 
 function noteEventFromKey(
@@ -742,6 +832,8 @@ function normalizeSettings(settings: HandKeyboardSettings): HandKeyboardSettings
     : defaultHandKeyboardSettings.scale;
   const handOrder =
     settings.handOrder === "tracker" ? "tracker" : defaultHandKeyboardSettings.handOrder;
+  const poseMode =
+    settings.poseMode === "floorView" ? "floorView" : defaultHandKeyboardSettings.poseMode;
 
   return {
     instrument,
@@ -749,6 +841,7 @@ function normalizeSettings(settings: HandKeyboardSettings): HandKeyboardSettings
     rootMidiNote: Math.round(
       clampFinite(settings.rootMidiNote, 36, 84, defaultHandKeyboardSettings.rootMidiNote),
     ),
+    poseMode,
     volume: clampFinite(settings.volume, 0, 1.2, defaultHandKeyboardSettings.volume),
     tone: clampFinite(settings.tone, 0, 1, defaultHandKeyboardSettings.tone),
     pressThreshold,
@@ -949,6 +1042,18 @@ function clampFinite(
     return fallback;
   }
   return clamp(value, minimum, maximum);
+}
+
+function normalizeRange(value: number, minimum: number, maximum: number): number {
+  if (maximum === minimum) {
+    return value >= maximum ? 1 : 0;
+  }
+
+  if (maximum > minimum) {
+    return clamp((value - minimum) / (maximum - minimum), 0, 1);
+  }
+
+  return clamp((minimum - value) / (minimum - maximum), 0, 1);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

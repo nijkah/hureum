@@ -54,6 +54,7 @@ import { GraphEditor } from "./GraphEditor";
 import {
   handKeyboardInstrumentOptions,
   handKeyboardOrderOptions,
+  handKeyboardPoseModeOptions,
   handKeyboardScaleOptions,
   type HandKeyboardSettings,
 } from "./handKeyboard";
@@ -732,6 +733,12 @@ function HandKeyboardPanel({
             onChange={(value) => update("rootMidiNote", Math.round(value))}
           />
         </div>
+        <SelectField
+          label="Pose Mode"
+          value={settings.poseMode}
+          onChange={(value) => update("poseMode", value)}
+          options={handKeyboardPoseModeOptions}
+        />
         <SelectField
           label="Hand Order"
           value={settings.handOrder}
