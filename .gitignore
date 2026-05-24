@@ -1,0 +1,12 @@
+node_modules
+.pnpm-store
+dist
+out
+dist-electron
+.vite
+.turbo
+coverage
+*.local
+.DS_Store
+*.log
+/packages/gyeol/

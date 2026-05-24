@@ -1,0 +1,33 @@
+{
+  "name": "@hello-cam/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@hello-cam/audio": "workspace:*",
+    "@hello-cam/core": "workspace:*",
+    "@hello-cam/gyeol": "workspace:*",
+    "@hello-cam/render-webgpu": "workspace:*",
+    "@mediapipe/tasks-vision": "^0.10.22",
+    "@xyflow/react": "^12.3.6",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2"
+  }
+}
