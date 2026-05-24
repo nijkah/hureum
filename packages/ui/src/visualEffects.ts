@@ -69,7 +69,7 @@ return vec4<f32>(clamp(mixed, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 `.trim();
 
 export const edgeSketchFragment = `
-let px = vec2<f32>(1.0 / max(params.width, 1.0), 1.0 / max(params.height, 1.0));
+let px = vec2<f32>(3.0 / max(params.width, 1.0), 3.0 / max(params.height, 1.0));
 let l00 = dot(camera(uv + px * vec2<f32>(-1.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
 let l10 = dot(camera(uv + px * vec2<f32>(0.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
 let l20 = dot(camera(uv + px * vec2<f32>(1.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -80,14 +80,14 @@ let l12 = dot(camera(uv + px * vec2<f32>(0.0, 1.0)).rgb, vec3<f32>(0.2126, 0.715
 let l22 = dot(camera(uv + px * vec2<f32>(1.0, 1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
 let gx = -l00 - 2.0 * l01 - l02 + l20 + 2.0 * l21 + l22;
 let gy = -l00 - 2.0 * l10 - l20 + l02 + 2.0 * l12 + l22;
-let edge = smoothstep(0.06, 0.32, length(vec2<f32>(gx, gy)));
+let edge = smoothstep(0.018, 0.16, length(vec2<f32>(gx, gy)));
 let paper = vec3<f32>(0.93, 0.91, 0.86);
 let ink = vec3<f32>(0.06, 0.08, 0.09);
 return vec4<f32>(mix(paper, ink, edge), 1.0);
 `.trim();
 
 export const neonEdgesFragment = `
-let px = vec2<f32>(1.0 / max(params.width, 1.0), 1.0 / max(params.height, 1.0));
+let px = vec2<f32>(3.0 / max(params.width, 1.0), 3.0 / max(params.height, 1.0));
 let l00 = dot(camera(uv + px * vec2<f32>(-1.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
 let l10 = dot(camera(uv + px * vec2<f32>(0.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
 let l20 = dot(camera(uv + px * vec2<f32>(1.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -98,7 +98,7 @@ let l12 = dot(camera(uv + px * vec2<f32>(0.0, 1.0)).rgb, vec3<f32>(0.2126, 0.715
 let l22 = dot(camera(uv + px * vec2<f32>(1.0, 1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
 let gx = -l00 - 2.0 * l01 - l02 + l20 + 2.0 * l21 + l22;
 let gy = -l00 - 2.0 * l10 - l20 + l02 + 2.0 * l12 + l22;
-let edge = clamp(length(vec2<f32>(gx, gy)) * (2.8 + params.level * 2.0), 0.0, 1.0);
+let edge = clamp(length(vec2<f32>(gx, gy)) * (7.5 + params.level * 5.5), 0.0, 1.0);
 let hue = vec3<f32>(0.08 + params.bass * 0.24, 0.72 + params.mid * 0.2, 1.0 + params.treble * 0.3);
 let base = camera(uv).rgb * 0.12;
 return vec4<f32>(clamp(base + hue * pow(edge, 0.72), vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
@@ -160,7 +160,8 @@ let wobble = vec2<f32>(sin(params.time * 1.7), cos(params.time * 1.13)) * 0.003;
 let trailA = previous(uv + drift + wobble).rgb;
 let trailB = previous(uv + drift * 2.1 - wobble).rgb;
 let tintedTrail = max(trailA * vec3<f32>(0.96, 0.84, 1.08), trailB * vec3<f32>(0.66, 0.92, 1.16));
-let color = live * 0.78 + tintedTrail * 0.7;
+let motion = abs(live - trailA);
+let color = live * 0.66 + tintedTrail * 0.68 + motion * vec3<f32>(1.3, 0.55, 1.35);
 return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 `.trim();
 
@@ -472,7 +473,8 @@ function globalEffectStep(effectId: string, index: number): string {
   let trailA${index} = previous(uv + drift${index} + wobble${index}).rgb;
   let trailB${index} = previous(uv + drift${index} * 2.1 - wobble${index}).rgb;
   let tintedTrail${index} = max(trailA${index} * vec3<f32>(0.96, 0.84, 1.08), trailB${index} * vec3<f32>(0.66, 0.92, 1.16));
-  color = color * 0.78 + tintedTrail${index} * 0.7;
+  let motion${index} = abs(color - trailA${index});
+  color = color * 0.66 + tintedTrail${index} * 0.68 + motion${index} * vec3<f32>(1.3, 0.55, 1.35);
 }`;
     default:
       return "";
@@ -482,18 +484,18 @@ function globalEffectStep(effectId: string, index: number): string {
 function sobelStep(index: number, neon: boolean): string {
   const edgeColor = neon
     ? `
-  let edge${index} = clamp(length(vec2<f32>(gx${index}, gy${index})) * (2.8 + params.level * 2.0), 0.0, 1.0);
+  let edge${index} = clamp(length(vec2<f32>(gx${index}, gy${index})) * (7.5 + params.level * 5.5), 0.0, 1.0);
   let hue${index} = vec3<f32>(0.08 + params.bass * 0.24, 0.72 + params.mid * 0.2, 1.0 + params.treble * 0.3);
   color = originalColor * 0.12 + hue${index} * pow(edge${index}, 0.72);`
     : `
-  let edge${index} = smoothstep(0.06, 0.32, length(vec2<f32>(gx${index}, gy${index})));
+  let edge${index} = smoothstep(0.018, 0.16, length(vec2<f32>(gx${index}, gy${index})));
   let paper${index} = vec3<f32>(0.93, 0.91, 0.86);
   let ink${index} = vec3<f32>(0.06, 0.08, 0.09);
   color = mix(paper${index}, ink${index}, edge${index});`;
 
   return `
 {
-  let px${index} = vec2<f32>(1.0 / max(params.width, 1.0), 1.0 / max(params.height, 1.0));
+  let px${index} = vec2<f32>(3.0 / max(params.width, 1.0), 3.0 / max(params.height, 1.0));
   let l00${index} = dot(camera(uv + px${index} * vec2<f32>(-1.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
   let l10${index} = dot(camera(uv + px${index} * vec2<f32>(0.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
   let l20${index} = dot(camera(uv + px${index} * vec2<f32>(1.0, -1.0)).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
